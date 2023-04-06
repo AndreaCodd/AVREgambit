@@ -17,9 +17,43 @@ from esys.downunder import *
 from esys.weipa import * 
 from scipy.io import netcdf_file
 
+def grepValuesByMaskPrint(xi, data, mask, name):
+    X=data.getX()
+    x=[]
+    y=[]
+    z=[]
+    values=[]
+   
+    for i in range(mask.getNumberOfDataPoints()):
+        if mask.getTupleForDataPoint(i)[0] > 0:
+            x1 = X.getTupleForDataPoint(i)[0]
+            y1 = X.getTupleForDataPoint(i)[1]
+            z1 = X.getTupleForDataPoint(i)[2]
+            v1 = data.getTupleForDataPoint(i)[0]
+            x.append(x1)
+            y.append(y1)
+            z.append(z1)
+            values.append(v1)
+     
+    if len(xi) == 2:
+        r=griddata((np.array(x), np.array(y)), np.array(values), tuple(xi), method='linear',  fill_value=np.nan, rescale=False)  
+        xc=np.array(xi[0].reshape(-1,1))
+        yc=np.array(xi[1].reshape(-1,1))
+        data = np.array(r.reshape(-1,1))     
+        np.savetxt(name, np.hstack([xc, yc, data]), delimiter =',', fmt='%1.4e' )
+    else:
+        r=griddata((np.array(x), np.array(y), np.array(z)), np.array(values), tuple(xi), method='linear', fill_value=np.nan, rescale=False) 
+        xc=np.array(xi[0].reshape(-1,1))
+        yc=np.array(xi[1].reshape(-1,1))
+        zc=np.array(xi[2].reshape(-1,1))        
+        data = np.array(r.reshape(-1,1))     
+        np.savetxt(name, np.hstack([xc, yc, zc, data]), delimiter =',', fmt='%1.4e' )    
+    return
+
 class ACmag(object):
-    def __init__(self, domain, w_e, bBx, bBy, bBz, dmag_e, k_0, mu, m0,
-         atol=1.0, rtol=1.0, iter_max=100, pde_tol=1e-8, output_name='solutions', verboseLevel="low"):
+    def __init__(self, domain, w_e, bBx, bBy, bBz, dmag_e, k_0, mu, m0, dataGrid, suscGrid,
+         atol=1.0, rtol=1.0, iter_max=100, pde_tol=1e-8, output_name='solutions', 
+         csv_name = 'csvs', verboseLevel="low"):
 
         self.domain = domain
         self.w_e = w_e
@@ -40,12 +74,27 @@ class ACmag(object):
         self.mfs=[]
         self.smooths=[]
         self.output_name=output_name
-        
+  
         #boundaries       
         z=self.domain.getX()[2]
         top = whereZero(z-sup(z))
         self.pdeu = self.setupPDE()
         self.pdeu.setValue(q=top)
+
+        # output stuff - grids and masks
+        self.suscGrid = suscGrid
+        self.dataGrid = dataGrid
+        self.mskBaseRF = Scalar(0, ReducedFunction(self.domain))
+        self.mskBaseRF.setTaggedValue("Base", 1)
+        self.mskBaseRF.expand()
+        mskDataRF = Scalar(0, ReducedFunction(self.domain))
+        mskDataRF.setTaggedValue("DataArea", 1)
+        mskDataRF.expand()
+        self.mskDataF=interpolate(mskDataRF,Function(domain)) 
+        self.outputname = output_name  
+        self.csv_name = csv_name
+        
+        
        
     def setupPDE(self):
         pde=LinearSinglePDE(self.domain, isComplex=False)
@@ -86,7 +135,7 @@ class ACmag(object):
         return inner(self.wbBv,-grad(u))
 
 
-    def myPCG(self, x,r):
+    def myPCG(self, x,r, itermax,rtol):
        piter=0
        rhat=self.Msolve(r)
        d = rhat
@@ -128,22 +177,37 @@ class ACmag(object):
            if mf<0.05 and not donep05:
                print("0.05")
                saveSilo(self.output_name+"p05", cmag=cmag, m=x*self.k_0)
+               saveVTK(self.output_name+"p05", cmag=cmag, m=x*self.k_0)
+               grepValuesByMaskPrint(self.dataGrid, cmag, self.mskDataF,self.csv_name+"_computedmag_p05.csv")
+               grepValuesByMaskPrint(self.suscGrid, x*self.k_0, self.mskBaseRF, self.csv_name+"_susceptibility_p05.csv")                  
                donep05=True
            if mf<0.01 and not donep01:
                print("0.01")
                saveSilo(self.output_name+"p01", cmag=cmag, m=x*self.k_0)
+               saveVTK(self.output_name+"p01", cmag=cmag, m=x*self.k_0)
+               grepValuesByMaskPrint(self.dataGrid, cmag, self.mskDataF,self.csv_name+"_computedmag_p01.csv")
+               grepValuesByMaskPrint(self.suscGrid, x*self.k_0, self.mskBaseRF, self.csv_name+"_susceptibility_p01.csv")                 
                donep01=True
            if mf<0.005 and not donep005:
                print("0.005")
                saveSilo(self.output_name+"p005", cmag=cmag, m=x*self.k_0)
+               saveVTK(self.output_name+"p005", cmag=cmag, m=x*self.k_0)
+               grepValuesByMaskPrint(self.dataGrid, cmag, self.mskDataF,self.csv_name+"_computedmag_p005.csv")
+               grepValuesByMaskPrint(self.suscGrid, x*self.k_0, self.mskBaseRF, self.csv_name+"_susceptibility_p005.csv")                 
                donep005=True
            if mf<0.003 and not donep003:
                print("0.003")
                saveSilo(self.output_name+"p003", cmag=cmag, m=x*self.k_0)
+               saveVTK(self.output_name+"p003", cmag=cmag, m=x*self.k_0)
+               grepValuesByMaskPrint(self.dataGrid, cmag, self.mskDataF,self.csv_name+"_computedmag_p003.csv")
+               grepValuesByMaskPrint(self.suscGrid, x*self.k_0, self.mskBaseRF, self.csv_name+"_susceptibility_p003.csv")                 
                donep003=True
            if mf<0.008 and not donep008:
                print("0.008")
                saveSilo(self.output_name+"p008", cmag=cmag, m=x*self.k_0)
+               saveVTK(self.output_name+"p008", cmag=cmag, m=x*self.k_0)
+               grepValuesByMaskPrint(self.dataGrid, cmag, self.mskDataF,self.csv_name+"_computedmag_p008.csv")
+               grepValuesByMaskPrint(self.suscGrid, x*self.k_0, self.mskBaseRF, self.csv_name+"_susceptibility_p008.csv")                 
                donep008=True
            self.mfs.append(mf)
            smooth=integrate(inner(grad(x),grad(x)))
@@ -288,16 +352,68 @@ dr=DataReader(config.data_file)
 dmag_e = dr.extractData(dom)*wherePositive(w_e)*data_scale   #### convert to T? butdata in nT too 
 del dr
 
+# grids for output computed gravity and density
+# from mesh
+dataRefX = config.DataRefX
+dataRefY = config.DataRefY
+DataSpacingX = config.DataSpacingX
+DataSpacingY = config.DataSpacingY
+spZ = config.DataMeshSizeVertical
+coreDepth = config.CoreThickness
+VerticalMeshCB = config.MeshSizeCoreFactor*spZ
+numX = config.DataNumX
+numY = config.DataNumY
+
+spanX = dataRefX + (numX-1)*DataSpacingX
+spanY = dataRefY + (numY-1)*DataSpacingY
+
+print(spanX,spanY)
+
+
+print("coreDepth",coreDepth)
+print("spZ/2",spZ/2)
+print("VerticalMeshCB",VerticalMeshCB)
+
+totZD = coreDepth - spZ/2. - VerticalMeshCB
+print("totZD",totZD)
+numZ = 1 + int(np.floor(totZD/spZ))
+print("numZ",numZ)
+totZD = -(numZ-1)*spZ-spZ/2.
+print("totZD",totZD)
+
+# data grid
+DXg = np.linspace(dataRefX + 0.5*DataSpacingX, spanX-0.5*DataSpacingX, numX-1, endpoint=True)
+DYg = np.linspace(dataRefY + 0.5*DataSpacingY, spanY-0.5*DataSpacingY, numY-1, endpoint=True) 
+dataGrid = np.meshgrid(DXg, DYg)
+
+# density grid
+DX = np.linspace(dataRefX + 1.5*DataSpacingX, spanX-1.5*DataSpacingX, numX-3, endpoint=True)
+DY = np.linspace(dataRefY + 1.5*DataSpacingY, spanY-1.5*DataSpacingY, numY-3, endpoint=True)
+DZbase = np.linspace(totZD, -spZ/2, numZ, endpoint=True)
+suscGrid = np.meshgrid(DX, DY, DZbase)
+
+# initial guess
 m0 = Scalar(0., ContinuousFunction(dom)) 
 k_0 = k_0*ground_e
 
 #if config.VerboseLevel == "low":
-cmag = ACmag(dom, w_e, bBx, bBy, bBz, dmag_e, k_0, mu, m0, atol, rtol, iter_max, pdetol, config.output_name, config.VerboseLevel)
+cmag = ACmag(dom, w_e, bBx, bBy, bBz, dmag_e, k_0, mu, m0, dataGrid, suscGrid,
+               atol, rtol, iter_max, pdetol, config.output_name, config.output_name, config.csv_name, config.VerboseLevel)
 m, cmb = cmag.solve()
 mdiff=cmb*w_e-dmag_e
 
 newk=m*k_0
 saveSilo(config.output_name+"_final", c_mag = cmb ,magdiff=mdiff, m=m, data=dmag_e, k=newk)
+saveVTK(config.output_name+"_final", c_mag = cmb ,magdiff=mdiff, m=m, data=dmag_e, k=newk)
+mskBaseRF = Scalar(0, ReducedFunction(dom))
+mskBaseRF.setTaggedValue("Base", 1)
+mskBaseRF.expand()
+mskDataRF = Scalar(0, ReducedFunction(dom))
+mskDataRF.setTaggedValue("DataArea", 1)
+mskDataRF.expand()
+mskDataF=interpolate(mskDataRF,Function(dom)) 
+grepValuesByMaskPrint(dataGrid, cmag, mskDataF, config.csv_name+"_computedmag_final.csv")
+grepValuesByMaskPrint(suscGrid, magdiff, mskBaseRF, config.csv_name+"_susceptibility_final.csv")   
 print('results silo saved to '+config.output_name+'_final.silo')
 print("finished")
 

@@ -11,6 +11,7 @@ from esys.escript import *
 from esys.finley import ReadGmsh, ReadMesh
 import esys.escript.unitsSI as U
 import numpy as np
+from scipy.interpolate import griddata
 from esys.escript.linearPDEs import LinearSinglePDE, SolverOptions
 from esys.escript.pdetools import PCG
 from esys.downunder import *
@@ -49,6 +50,7 @@ def grepValuesByMaskPrint(xi, data, mask, name):
         data = np.array(r.reshape(-1,1))     
         np.savetxt(name, np.hstack([xc, yc, zc, data]), delimiter =',', fmt='%1.4e' )    
     return
+
 
 class ACmag(object):
     def __init__(self, domain, w_e, bBx, bBy, bBz, dmag_e, k_0, mu, m0, dataGrid, suscGrid,
@@ -236,7 +238,7 @@ class ACmag(object):
                  atol=self.atol, rtol=self.rtol, iter_max=self.iter_max, 
                  initial_guess=True, verbose=True)
         elif self.verboseLevel == "high":#    
-            m = self.myPCG(self.m0, r)
+            m = self.myPCG(self.m0, r, itermax=self.iter_max,rtol=self.rtol)
         # magnetism
         cmag= self.compCmag(m[0])
         mf0=0.5*integrate((self.dmag_e)**2)/self.dd 
@@ -398,7 +400,7 @@ k_0 = k_0*ground_e
 
 #if config.VerboseLevel == "low":
 cmag = ACmag(dom, w_e, bBx, bBy, bBz, dmag_e, k_0, mu, m0, dataGrid, suscGrid,
-               atol, rtol, iter_max, pdetol, config.output_name, config.output_name, config.csv_name, config.VerboseLevel)
+               atol, rtol, iter_max, pdetol, config.output_name, config.csv_name, config.VerboseLevel)
 m, cmb = cmag.solve()
 mdiff=cmb*w_e-dmag_e
 
@@ -412,8 +414,10 @@ mskDataRF = Scalar(0, ReducedFunction(dom))
 mskDataRF.setTaggedValue("DataArea", 1)
 mskDataRF.expand()
 mskDataF=interpolate(mskDataRF,Function(dom)) 
-grepValuesByMaskPrint(dataGrid, cmag, mskDataF, config.csv_name+"_computedmag_final.csv")
-grepValuesByMaskPrint(suscGrid, magdiff, mskBaseRF, config.csv_name+"_susceptibility_final.csv")   
+#grepValuesByMaskPrint(dataGrid, cmb, mskDataF, config.csv_name+"_computedmag_final.csv")
+#grepValuesByMaskPrint(suscGrid, mdiff, mskBaseRF, config.csv_name+"_susceptibility_final.csv")   
+grepValuesByMaskPrint(dataGrid, cmb, mskDataF, config.csv_name+"_computedmag_final.csv")
+grepValuesByMaskPrint(suscGrid, newk, mskBaseRF, config.csv_name+"_susceptibility_final.csv") 
 print('results silo saved to '+config.output_name+'_final.silo')
 print("finished")
 

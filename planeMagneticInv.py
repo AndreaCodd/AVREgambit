@@ -13,10 +13,12 @@ import esys.escript.unitsSI as U
 import numpy as np
 from scipy.interpolate import griddata
 from esys.escript.linearPDEs import LinearSinglePDE, SolverOptions
-from esys.escript.pdetools import PCG
-from esys.downunder import *
+from esys.escript.pdetools import PCG, ArithmeticTuple
+#from esys.downunder import *
 from esys.weipa import * 
-from scipy.io import netcdf_file
+import netCDF4 as netCDF4
+
+
 
 def grepValuesByMaskPrint(xi, data, mask, name):
     X=data.getX()
@@ -252,7 +254,8 @@ class DataReader(object):
     EARTH_R=6378.0088*1000.
     toobig=1.e99
     def __init__(self, filename):
-        f=netcdf_file(data_file, 'r', mmap=False)
+        #f=netcdf_file(data_file, 'r', mmap=False)
+        f=netCDF4.Dataset(data_file)
         self.setReferencePoint()
         latitude=None
         longitude=None
